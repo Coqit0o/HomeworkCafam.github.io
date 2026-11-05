@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HomeworCafam</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<style>
+:root{--bg:#f4f6fb;--surface:#fff;--text:#1d2433;--muted:#667085;--line:#dfe3ec;--brand:#06187e;--brand2:#0057b8;--note:#fff3a3;--notetext:#4a3f00}
+@media (prefers-color-scheme:dark){:root{--bg:#12151c;--surface:#1b2030;--text:#eceff6;--muted:#9aa3b5;--line:#2c3348;--note:#5c5114;--notetext:#fff4b0;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+.btn{border:0;background:var(--brand2);color:#fff;padding:9px 14px;border-radius:9px;cursor:pointer}
+.btn.red{background:var(--brand)}.btn.ghost{background:transparent;color:var(--muted);border:1px solid var(--line)}
+.btn.sm{padding:5px 9px;font-size:13px}.btn:disabled{opacity:.5;cursor:default}
+input,select{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:28px;width:100%;max-width:380px;display:grid;gap:12px;text-align:center}
+.logo{font-size:28px;font-weight:800}.logo b{color:var(--brand)}.logo span{color:var(--brand2)}
+.muted{color:var(--muted);font-size:13px}
+#app{display:none;min-height:100vh}
+header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 18px;background:var(--surface);border-bottom:1px solid var(--line)}
+.layout{display:grid;grid-template-columns:240px 1fr;min-height:calc(100vh - 58px)}
+aside{padding:14px;border-right:1px solid var(--line);display:grid;gap:8px;align-content:start}
+.folder{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;cursor:pointer;background:var(--surface);border:1px solid var(--line)}
+.folder.on{border-color:var(--brand2);box-shadow:0 0 0 2px rgba(0,87,184,.25)}
+.folder .n{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.folder .c{font-size:12px;color:var(--muted)}
+main{padding:18px;min-width:0}
+.titlebar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.titlebar input{font-size:20px;font-weight:700;flex:1;min-width:140px;border-color:transparent;background:transparent}
+.titlebar input:focus{border-color:var(--line);background:var(--surface)}
+.add{display:flex;gap:8px;margin-bottom:14px}.add input{flex:1}
+.row{display:grid;grid-template-columns:1fr 230px;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px}
+.row.done .t{text-decoration:line-through;opacity:.55}
+.fields{display:grid;gap:8px;align-content:start}.fields .t{font-weight:600;width:100%}
+.meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.postit{background:var(--note);color:var(--notetext);border:0;border-radius:3px 3px 14px 3px;padding:10px;min-height:96px;resize:vertical;width:100%;box-shadow:2px 3px 6px rgba(0,0,0,.18);transform:rotate(-1deg);font-family:"Segoe Print","Comic Sans MS",cursive,system-ui}
+.postit::placeholder{color:var(--notetext);opacity:.6}
+.empty{text-align:center;color:var(--muted);padding:40px 10px}
+#status{font-size:12px;color:var(--muted)}#err{color:var(--brand);font-size:13px}
+@media(max-width:760px){.layout{grid-template-columns:1fr}aside{border-right:0;border-bottom:1px solid var(--line)}.row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<section id="login">
+  <div class="card">
+    <div class="logo"><b>Homework</b><span>Cafam</span></div>
+    <div class="muted">Organiza tus tareas por carpetas :3.</div>
+    <input id="email" type="email" placeholder="Correo electrónico" autocomplete="email">
+    <input id="pass" type="password" placeholder="Contraseña (mínimo 6 caracteres)" autocomplete="current-password">
+    <button class="btn red" id="signin">Iniciar sesión</button>
+    <button class="btn ghost" id="signup">Crear cuenta</button>
+    <div id="err"></div>
+  </div>
+</section>
+
+<section id="app">
+  <header>
+    <div class="logo" style="font-size:20px"><b>Homework</b><span>Cafam</span></div>
+    <div style="display:flex;gap:10px;align-items:center"><span id="status"></span><span id="who" class="muted"></span><button class="btn ghost sm" id="out">Salir</button></div>
+  </header>
+  <div class="layout">
+    <aside>
+      <button class="btn" id="addFolder">＋ Nueva carpeta</button>
+      <div id="folders" style="display:grid;gap:8px"></div>
+    </aside>
+    <main id="main"></main>
+  </div>
+</section>
+
+<script>
+// 1) PEGA AQUÍ los datos de tu proyecto (Supabase > Project Settings > API)
+const SUPABASE_URL = "https://rdhnrspittnuehjafgjz.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkaG5yc3BpdHRudWVoamFmZ2p6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM4MzY4ODAsImV4cCI6MjEwOTQxMjg4MH0.YNLGGZ2fgTICRkhhyeOve11OsfC4eMcRsFZY09Jt1bg";
+
+const $ = i => document.getElementById(i);
+const STAT = ["Pendiente","En progreso","Hecha"];
+let sb, folders = [], tasks = [], cur = null;
+const timers = {};
+
+function setStatus(t){ $("status").textContent = t; }
+function check(res){ if(res.error){ setStatus("Error: " + res.error.message); throw res.error; } setStatus("Guardado ✓"); return res.data; }
+function later(key, fn){ setStatus("Guardando…"); clearTimeout(timers[key]); timers[key] = setTimeout(fn, 500); }
+
+if (SUPABASE_URL.startsWith("PEGA")) {
+  $("err").textContent = "Falta configurar SUPABASE_URL y SUPABASE_KEY en el código.";
+} else {
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  sb.auth.onAuthStateChange((_e, session) => session ? start(session.user) : stop());
+}
+
+async function auth(mode){
+  if(!sb) return;
+  const email = $("email").value.trim(), password = $("pass").value;
+  if(!email || password.length < 6){ $("err").textContent = "Escribe tu correo y una contraseña de 6 o más caracteres."; return; }
+  $("err").textContent = "Conectando…";
+  const r = mode === "up" ? await sb.auth.signUp({email, password}) : await sb.auth.signInWithPassword({email, password});
+  if(r.error){ $("err").textContent = r.error.message; return; }
+  if(mode === "up" && !r.data.session) $("err").textContent = "Cuenta creada. Revisa tu correo para confirmarla y luego inicia sesión.";
+  else $("err").textContent = "";
+}
+
+async function start(user){
+  $("who").textContent = "👤 " + user.email;
+  $("login").style.display = "none"; $("app").style.display = "block";
+  folders = check(await sb.from("folders").select("*").order("created_at"));
+  tasks = check(await sb.from("tasks").select("*").order("position"));
+  if(!folders.find(f => f.id === cur)) cur = folders.length ? folders[0].id : null;
+  render();
+}
+function stop(){ folders = []; tasks = []; cur = null; $("app").style.display = "none"; $("login").style.display = "flex"; }
+
+function render(){
+  const f = $("folders"); f.innerHTML = "";
+  folders.forEach(fo => {
+    const d = document.createElement("div"); d.className = "folder" + (fo.id === cur ? " on" : "");
+    const pend = tasks.filter(t => t.folder_id === fo.id && t.status !== 2).length;
+    d.innerHTML = '<span>📁</span><span class="n"></span><span class="c">' + pend + '</span>';
+    d.querySelector(".n").textContent = fo.name;
+    d.onclick = () => { cur = fo.id; render(); };
+    f.appendChild(d);
+  });
+  renderMain();
+}
+
+function renderMain(){
+  const m = $("main"); m.innerHTML = "";
+  const fo = folders.find(x => x.id === cur);
+  if(!fo){ m.innerHTML = '<div class="empty">Crea tu primera carpeta para empezar 📁</div>'; return; }
+
+  const tb = document.createElement("div"); tb.className = "titlebar";
+  const ti = document.createElement("input"); ti.value = fo.name;
+  ti.onchange = async () => { fo.name = ti.value.trim() || "Sin nombre"; check(await sb.from("folders").update({name: fo.name}).eq("id", fo.id)); render(); };
+  const del = document.createElement("button"); del.className = "btn ghost sm"; del.textContent = "Eliminar carpeta";
+  del.onclick = async () => {
+    if(!confirm("¿Eliminar la carpeta y todas sus tareas?")) return;
+    check(await sb.from("folders").delete().eq("id", fo.id));
+    folders = folders.filter(x => x.id !== fo.id); tasks = tasks.filter(t => t.folder_id !== fo.id);
+    cur = folders.length ? folders[0].id : null; render();
+  };
+  tb.append(ti, del); m.appendChild(tb);
+
+  const add = document.createElement("div"); add.className = "add";
+  add.innerHTML = '<input placeholder="Nueva tarea…"><button class="btn red">Agregar</button>';
+  const ai = add.querySelector("input");
+  const doAdd = async () => {
+    const v = ai.value.trim(); if(!v) return;
+    const mine = tasks.filter(t => t.folder_id === fo.id);
+    const pos = mine.length ? Math.max(...mine.map(t => t.position)) + 1 : 0;
+    tasks.push(check(await sb.from("tasks").insert({folder_id: fo.id, title: v, position: pos}).select().single()));
+    render();
+  };
+  add.querySelector("button").onclick = doAdd; ai.onkeydown = e => { if(e.key === "Enter") doAdd(); };
+  m.appendChild(add);
+
+  const list = tasks.filter(t => t.folder_id === fo.id).sort((a, b) => a.position - b.position);
+  if(!list.length){ const e = document.createElement("div"); e.className = "empty"; e.textContent = "Sin tareas todavía. ¡Agrega la primera!"; m.appendChild(e); }
+
+  list.forEach((t, i) => {
+    const patch = (obj, key) => { Object.assign(t, obj); later(t.id + (key||""), async () => check(await sb.from("tasks").update(obj).eq("id", t.id))); };
+    const r = document.createElement("div"); r.className = "row" + (t.status === 2 ? " done" : "");
+    const fl = document.createElement("div"); fl.className = "fields";
+    const tt = document.createElement("input"); tt.className = "t"; tt.value = t.title;
+    tt.onchange = () => patch({title: tt.value.trim() || "Sin título"}, "t");
+    const mt = document.createElement("div"); mt.className = "meta";
+    const sel = document.createElement("select");
+    STAT.forEach((s, k) => { const o = document.createElement("option"); o.value = k; o.textContent = s; if(k === t.status) o.selected = true; sel.appendChild(o); });
+    sel.onchange = () => { patch({status: +sel.value}, "s"); render(); };
+    const du = document.createElement("input"); du.type = "date"; du.value = t.due || "";
+    du.onchange = () => patch({due: du.value || null}, "d");
+    const mk = (txt, fn, dis) => { const b = document.createElement("button"); b.className = "btn ghost sm"; b.textContent = txt; b.disabled = !!dis; b.onclick = fn; return b; };
+    const swap = async (o) => {
+      const p = t.position; t.position = o.position; o.position = p;
+      check(await sb.from("tasks").upsert([{id: t.id, folder_id: t.folder_id, title: t.title, position: t.position}, {id: o.id, folder_id: o.folder_id, title: o.title, position: o.position}]));
+      render();
+    };
+    mt.append(sel, du,
+      mk("↑", () => swap(list[i-1]), i === 0),
+      mk("↓", () => swap(list[i+1]), i === list.length - 1),
+      mk("🗑", async () => { check(await sb.from("tasks").delete().eq("id", t.id)); tasks = tasks.filter(x => x.id !== t.id); render(); }));
+    fl.append(tt, mt);
+    const pi = document.createElement("textarea"); pi.className = "postit"; pi.placeholder = "📝 Post-it: escribe tus notas…"; pi.value = t.note || "";
+    pi.oninput = () => patch({note: pi.value}, "n");
+    r.append(fl, pi); m.appendChild(r);
+  });
+}
+
+$("signin").onclick = () => auth("in");
+$("signup").onclick = () => auth("up");
+$("pass").onkeydown = e => { if(e.key === "Enter") auth("in"); };
+$("out").onclick = () => sb.auth.signOut();
+$("addFolder").onclick = async () => {
+  const n = prompt("Nombre de la carpeta:"); if(!n || !n.trim()) return;
+  const fo = check(await sb.from("folders").insert({name: n.trim()}).select().single());
+  folders.push(fo); cur = fo.id; render();
+};
+</script>
+</body>
+</html>
